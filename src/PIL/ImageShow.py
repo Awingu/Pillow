@@ -15,7 +15,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 from shlex import quote
 
 from PIL import Image
@@ -147,16 +146,15 @@ class MacViewer(Viewer):
 
     def show_file(self, file, **options):
         """Display given file"""
-        fd, path = tempfile.mkstemp()
-        with os.fdopen(fd, "w") as f:
-            f.write(file)
-        with open(path) as f:
-            subprocess.Popen(
-                ["im=$(cat); open -a Preview.app $im; sleep 20; rm -f $im"],
-                shell=True,
-                stdin=f,
-            )
-        os.remove(path)
+        subprocess.call(["open", "-a", "Preview.app", file])
+        subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "import os, sys, time;time.sleep(20);os.remove(sys.argv[1])",
+                file,
+            ]
+        )
         return 1
 
 
@@ -172,19 +170,6 @@ class UnixViewer(Viewer):
         command = self.get_command_ex(file, **options)[0]
         return f"({command} {quote(file)}; rm -f {quote(file)})&"
 
-    def show_file(self, file, **options):
-        """Display given file"""
-        fd, path = tempfile.mkstemp()
-        with os.fdopen(fd, "w") as f:
-            f.write(file)
-        with open(path) as f:
-            command = self.get_command_ex(file, **options)[0]
-            subprocess.Popen(
-                ["im=$(cat);" + command + " $im; rm -f $im"], shell=True, stdin=f
-            )
-        os.remove(path)
-        return 1
-
 
 class DisplayViewer(UnixViewer):
     """The ImageMagick ``display`` command."""
@@ -192,6 +177,16 @@ class DisplayViewer(UnixViewer):
     def get_command_ex(self, file, **options):
         command = executable = "display"
         return command, executable
+
+    def show_file(self, file, **options):
+        args = ["display"]
+        if "title" in options:
+            args += ["-name", options["title"]]
+        args.append(file)
+
+        subprocess.Popen(args)
+        os.remove(file)
+        return 1
 
 
 class GmDisplayViewer(UnixViewer):
@@ -202,6 +197,11 @@ class GmDisplayViewer(UnixViewer):
         command = "gm display"
         return command, executable
 
+    def show_file(self, file, **options):
+        subprocess.Popen(["gm", "display", file])
+        os.remove(file)
+        return 1
+
 
 class EogViewer(UnixViewer):
     """The GNOME Image Viewer ``eog`` command."""
@@ -210,6 +210,11 @@ class EogViewer(UnixViewer):
         executable = "eog"
         command = "eog -n"
         return command, executable
+
+    def show_file(self, file, **options):
+        subprocess.Popen(["eog", "-n", file])
+        os.remove(file)
+        return 1
 
 
 class XVViewer(UnixViewer):
@@ -225,6 +230,16 @@ class XVViewer(UnixViewer):
         if title:
             command += f" -name {quote(title)}"
         return command, executable
+
+    def show_file(self, file, **options):
+        args = ["xv"]
+        if "title" in options:
+            args += ["-name", options["title"]]
+        args.append(file)
+
+        subprocess.Popen(args)
+        os.remove(file)
+        return 1
 
 
 if sys.platform not in ("win32", "darwin"):  # unixoids
